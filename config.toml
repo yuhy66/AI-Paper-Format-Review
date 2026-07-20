@@ -1,0 +1,17 @@
+[llm]
+endpoint = "http://localhost:8000/v1"
+model = "Qwen2.5-14B-Instruct"
+temperature = 0.1
+max_tokens = 2048
+
+[output]
+dir = "./result"
+
+[system]
+enable_cover_check = true
+enable_abstract_check = true
+enable_heading_check = true
+enable_figure_check = true
+enable_body_check = true
+enable_ref_code_check = true
+enable_ref_agent_check = true
