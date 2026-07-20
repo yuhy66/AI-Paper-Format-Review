@@ -1,0 +1,464 @@
+{
+  "project": {
+    "name": "论文格式审查系统",
+    "english_name": "AI-Paper-Format-Review",
+    "version": "1.0",
+    "description": "基于 python-docx 的论文格式自动审查工具，结合本地大模型进行 GB/T 7714-2025 参考文献著录格式合规判断",
+    "repo_url": "https://github.com/yuhy66/AI-Paper-Format-Review.git",
+    "technology_stack": {
+      "language": "Python 3.11+",
+      "main_library": "python-docx",
+      "http_client": "httpx",
+      "config": "TOML",
+      "llm_interface": "OpenAI-compatible API (本地部署)",
+      "code_style": "PEP 8",
+      "formatter": "ruff",
+      "test_framework": "pytest"
+    },
+    "target_users": "学院论文格式审查工作人员",
+    "deliverable": "run.py + src/ + config.toml + requirements.txt + pyproject.toml + README.md"
+  },
+
+  "paper_decomposition": {
+    "description": "论文 docx 按行文顺序遍历，识别到对应部分就归类到对应单元",
+    "units": [
+      { "id": 1, "name": "封面", "description": "封面页：固定位置、固定字体字号" },
+      { "id": 2, "name": "扉页", "description": "扉页/声明页：固定格式" },
+      { "id": 3, "name": "摘要", "description": "摘要部分：标题格式固定，字数统计，关键词格式检查" },
+      { "id": 4, "name": "章节标题", "description": "一级标题、二级标题等：层级编号检查，字号字体检查" },
+      { "id": 5, "name": "图/表/公式编号", "description": "正文中嵌入的图、表、公式编号：连续性检查，格式检查" },
+      { "id": 6, "name": "正文", "description": "全文主体内容：样式一致性检查" },
+      { "id": 7, "name": "参考文献列表", "description": "文末参考文献：编号顺序 + GB/T 7714-2025 著录格式合规判断" }
+    ]
+  },
+
+  "code_vs_agent_boundary": {
+    "principle": "能用纯代码判定的，绝不交给大模型",
+    "details": [
+      {
+        "unit_id": 1,
+        "unit": "封面",
+        "method": "纯代码",
+        "reason": "固定位置、固定字体字号，直接判等"
+      },
+      {
+        "unit_id": 2,
+        "unit": "扉页",
+        "method": "纯代码",
+        "reason": "固定位置、固定字体字号，直接判等"
+      },
+      {
+        "unit_id": 3,
+        "unit": "摘要",
+        "method": "纯代码",
+        "reason": "标题格式固定，字数用代码统计，关键词格式用正则匹配"
+      },
+      {
+        "unit_id": 4,
+        "unit": "章节标题",
+        "method": "纯代码",
+        "reason": "层级编号用正则提取，字号字体用 docx 属性判等，规则是死数据"
+      },
+      {
+        "unit_id": 5,
+        "unit": "图/表/公式编号",
+        "method": "纯代码",
+        "reason": "编号连续性做数学判断，格式用正则匹配，不需要理解语义"
+      },
+      {
+        "unit_id": 6,
+        "unit": "正文",
+        "method": "纯代码",
+        "reason": "全文属性比对，不需要理解文字含义"
+      },
+      {
+        "unit_id": 7,
+        "unit": "参考文献列表",
+        "method": "部分代码 + 部分 Agent",
+        "reason": "前半段（列表提取、编号顺序检查）→ 纯代码；后半段（GB/T 7714-2025 著录格式合规判断）→ 唯一必须用 Agent 的地方"
+      }
+    ]
+  },
+
+  "team_composition": {
+    "size": 6,
+    "principle": "每个人工作量均衡，且基本上每个人工作是并发的",
+    "members": [
+      {
+        "role": "文档拆解",
+        "branch_name": "feat/parser",
+        "count": 1,
+        "responsibilities": "用 python-docx 读取 docx，按 7 个单元拆解并输出统一结构化数据（JSON），供所有审查使用"
+      },
+      {
+        "role": "审查1",
+        "branch_name": "feat/check1",
+        "count": 1,
+        "unit_ids": [1, 2, 3],
+        "units": "封面、扉页、摘要",
+        "responsibilities": "纯代码审查：字体、字号、对齐、字数限制、关键词格式"
+      },
+      {
+        "role": "审查2",
+        "branch_name": "feat/check2",
+        "count": 1,
+        "unit_ids": [4, 5, 6],
+        "units": "章节标题、图/表/公式编号、正文",
+        "responsibilities": "纯代码审查：标题层级、编号连续性、全文一致性"
+      },
+      {
+        "role": "参考文献审查-代码侧",
+        "branch_name": "feat/ref-code",
+        "count": 1,
+        "unit_ids": [7],
+        "responsibilities": [
+          "参考文献编号顺序检查（递增、无跳号）",
+          "研究 GB/T 7714-2025 标准，将著录规则抽象成 JSON 结构，供 Agent 侧使用"
+        ]
+      },
+      {
+        "role": "参考文献审查-Agent侧",
+        "branch_name": "feat/ref-agent",
+        "count": 1,
+        "unit_ids": [7],
+        "responsibilities": [
+          "调用已部署的本地大模型 API",
+          "提示词设计与调优",
+          "将 JSON 规则嵌入提示词",
+          "著录合规判断",
+          "30 条测试集标注与迭代"
+        ],
+        "note": "本地大模型已由指导老师部署在 RTX 6000 上，Agent 侧负责调用 API 即可"
+      },
+      {
+        "role": "规则制定 + 报告汇总",
+        "branch_name": "feat/report (规则清单在 dev 上直接修改)",
+        "count": 1,
+        "responsibilities": {
+          "前期": "将学院论文规范要求，提炼分块整合，变成规则清单，将对应部分给到相应的审查者，作为审查者编码依据",
+          "后期": "收集所有报错，生成最终问题定位报告 + 构建20份错误注入测试集 + 计算查全率/误报率"
+        }
+      }
+    ]
+  },
+
+  "workflow_and_handoff": {
+    "principle": "保证并行，尽可能减少前后依赖",
+    "preparation_steps": [
+      {
+        "who": "规则制定者",
+        "output": "规则清单（分 7 个单元的中文条目）",
+        "to": "审查1、审查2、参考文献审查（代码侧）"
+      },
+      {
+        "who": "审查1",
+        "output": "报错 JSON 模板（预期结构样例）",
+        "to": "汇总者"
+      },
+      {
+        "who": "审查2",
+        "output": "报错 JSON 模板（预期结构样例）",
+        "to": "汇总者"
+      },
+      {
+        "who": "参考文献审查（代码侧）",
+        "output": "报错 JSON 模板 + 著录规则 JSON 模板",
+        "to": "报错模板给汇总者；著录规则 JSON 给 Agent 侧"
+      },
+      {
+        "who": "参考文献审查（Agent侧）",
+        "output": "报错 JSON 模板（预期结构样例）",
+        "to": "汇总者"
+      },
+      {
+        "who": "文档拆解",
+        "output": "统一结构化数据 JSON 模板（7 个单元的输出格式样例）",
+        "to": "所有审查者"
+      }
+    ],
+    "notes": [
+      "完成上述准备后，所有人并行开工写代码，此时每个人的输入/输出格式已经全部约定好，互不阻塞，独立开发",
+      "规则制定者把规则清单按单元切分：封面/扉页/摘要规则 → 给审查1；章节/编号/正文规则 → 给审查2；参考文献相关规则 → 给参考文献审查（代码侧）",
+      "规则制定者产出规则清单是唯一一个前置动作，一定要最先完成"
+    ],
+    "runtime_flow": {
+      "entry": "python run.py 论文.docx -c config.toml",
+      "steps": [
+        "自动创建 output/ 和 result/ 目录（若不存在）",
+        "读取 config.toml → 拿到 LLM 地址、模型名、温度等",
+        "调用 parser/docx_parser.py → 拆解为结构化 dict → 存到 output/parser_json/",
+        "依次调用各 checkers（传入拆解结果）→ 报错存到 output/checker_json/",
+        "调用 report/reporter.py → 读取 output/checker_json/ 下的所有报错 JSON → 合并 → 输出最终报告到 result/",
+        "Agent 侧 checker 使用 config 中的 LLM 配置连接本地模型"
+      ]
+    },
+    "rule_distribution": {
+      "前置依赖": "规则制定者产出规则清单（唯一前置动作）",
+      "给审查1": "封面/扉页/摘要规则",
+      "给审查2": "章节/编号/正文规则",
+      "给参考文献代码侧": "参考文献相关规则（编号格式 + GB/T 7714-2025 字段说明）"
+    }
+  },
+
+  "git_strategy": {
+    "branch_structure": {
+      "type": "三层分支",
+      "layers": [
+        {
+          "name": "master",
+          "purpose": "正式交付版本",
+          "contents": "只包含交付给用户的文件：run.py + src/ + config.toml + requirements.txt + pyproject.toml + README.md"
+        },
+        {
+          "name": "dev",
+          "purpose": "集成测试分支",
+          "contents": "包含全部文件（src/ + tests/ + docs/ + 配置等），各 feat 分支合并到这里进行全量测试和整体联调"
+        },
+        {
+          "name": "feat/*",
+          "purpose": "个人开发分支",
+          "contents": "每人一个分支，互不阻塞",
+          "naming_rules": {
+            "feat/parser": "文档拆解",
+            "feat/check1": "审查1（封面/扉页/摘要）",
+            "feat/check2": "审查2（章节/编号/正文）",
+            "feat/ref-code": "参考文献审查-代码侧",
+            "feat/ref-agent": "参考文献审查-Agent侧",
+            "feat/report": "规则制定 + 报告汇总"
+          }
+        }
+      ]
+    },
+    "merge_flow": "个人开发 → feat/xxx → (PR + 至少 1 人 Review) → dev → (全量测试通过) → master",
+    "collaboration_workflow": {
+      "first_time_setup": [
+        "git clone https://github.com/yuhy66/AI-Paper-Format-Review.git",
+        "cd AI-Paper-Format-Review",
+        "git switch dev",
+        "git switch -c feat/parser（每人对应自己的分支名）"
+      ],
+      "daily_development": [
+        "在 feat/xxx 分支上编码",
+        "git add .（暂存）",
+        "git commit -m \"feat: 具体做了什么\"（提交）",
+        "git push origin feat/xxx（推远程）"
+      ],
+      "merge_to_dev": [
+        "git checkout dev && git pull origin dev（更新本地 dev）",
+        "git checkout feat/parser && git merge dev（将最新 dev 合并到 feat 分支）",
+        "如有冲突 → 手动解决 → git add <文件> → git commit -m \"解决xxx冲突\"",
+        "git checkout dev && git merge feat/parser（合并到 dev）",
+        "git push origin dev（推送远程 dev）"
+      ],
+      "release_to_master": [
+        "git switch master",
+        "git restore --source=dev -- run.py src/ config.toml requirements.txt pyproject.toml README.md（只取交付文件）",
+        "git add . && git commit -m \"日志（谁做了什么）\" && git push origin master",
+        "git tag -a v1.0 -m \"论文格式审查1.0版本\" <commit-id>（打标签）",
+        "在 GitHub 上 release"
+      ]
+    },
+    "special_notes": {
+      "output_and_result": "output/ 和 result/ 随 dev 分支全量提交，用于团队成员之间共享 JSON 模板和接口数据",
+      "docs": "docs/ 仅提交到 dev 分支，不进入 master",
+      "squash_merge": "合入时使用 Squash Merge 保持 dev 历史干净"
+    }
+  },
+
+  "repository_structure": {
+    "root": "论文格式审查系统/",
+    "dev_branch_contents": ["src/", "output/", "result/", "tests/", "docs/", ".gitignore", "pyproject.toml", "requirements.txt", "README.md", "config.toml", "run.py"],
+    "master_branch_contents": ["run.py", "src/", "config.toml", "requirements.txt", "pyproject.toml", "README.md"],
+    "directories": [
+      {
+        "path": "run.py",
+        "type": "file",
+        "branch": "master",
+        "purpose": "唯一入口，对外发布的主运行文件",
+        "usage": "python run.py 论文.docx -c config.toml",
+        "responsibility": "读取配置 → 自动建目录（output/、result/）→ 调用 parser → 调用 checkers → 调用 report"
+      },
+      {
+        "path": "src/parser/docx_parser.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "文档拆解",
+        "purpose": "主拆解器：按行文顺序遍历 docx，识别各单元并归类"
+      },
+      {
+        "path": "src/parser/unit_defs.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "文档拆解",
+        "purpose": "7 个单元的识别规则（样式名对照、正则匹配规则等）"
+      },
+      {
+        "path": "src/checkers/cover_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "审查1",
+        "purpose": "封面+扉页格式检查（字体、字号、对齐方式）"
+      },
+      {
+        "path": "src/checkers/abstract_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "审查1",
+        "purpose": "摘要格式检查（字数统计、关键词格式）"
+      },
+      {
+        "path": "src/checkers/heading_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "审查2",
+        "purpose": "章节标题检查（层级编号顺序、字号字体）"
+      },
+      {
+        "path": "src/checkers/figure_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "审查2",
+        "purpose": "图/表/公式编号检查（连续性、编号格式）"
+      },
+      {
+        "path": "src/checkers/body_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "审查2",
+        "purpose": "正文格式检查（全文样式一致性）"
+      },
+      {
+        "path": "src/checkers/references/code_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "参考文献审查-代码侧",
+        "purpose": "参考文献编号顺序检查（递增、无跳号）"
+      },
+      {
+        "path": "src/checkers/references/agent_checker.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "参考文献审查-Agent侧",
+        "purpose": "GB/T 7714-2025 著录合规判定（调用本地 LLM）"
+      },
+      {
+        "path": "src/checkers/references/rules/gbt7714_2025.json",
+        "type": "file",
+        "branch": "master",
+        "owner": "参考文献审查-代码侧",
+        "purpose": "从标准中提取的著录规则 JSON（供 Agent 侧加载）"
+      },
+      {
+        "path": "src/report/reporter.py",
+        "type": "file",
+        "branch": "master",
+        "owner": "规则制定 + 报告汇总",
+        "purpose": "合并 N 份审查报错 JSON → 生成最终问题定位报告"
+      },
+      {
+        "path": "output/parser_json/",
+        "type": "dir",
+        "branch": "dev",
+        "purpose": "拆解后的结构化论文数据 JSON"
+      },
+      {
+        "path": "output/checker_json/",
+        "type": "dir",
+        "branch": "dev",
+        "purpose": "各审查模块产出的报错 JSON，reporter 直接读取此目录进行汇总"
+      },
+      {
+        "path": "result/",
+        "type": "dir",
+        "branch": "dev",
+        "purpose": "最终报告存放目录（输出格式待定：docx/pdf/json/md）"
+      },
+      {
+        "path": "config.toml",
+        "type": "file",
+        "branch": "master",
+        "purpose": "配置文件：LLM 连接参数、输出路径、检查项开关",
+        "example_content": {
+          "llm": {
+            "endpoint": "http://localhost:8000/v1",
+            "model": "Qwen2.5-14B-Instruct",
+            "temperature": 0.1,
+            "max_tokens": 2048
+          },
+          "output": {
+            "dir": "./result"
+          },
+          "system": {
+            "enable_cover_check": true,
+            "enable_abstract_check": true,
+            "enable_heading_check": true,
+            "enable_figure_check": true,
+            "enable_body_check": true,
+            "enable_ref_code_check": true,
+            "enable_ref_agent_check": true
+          }
+        }
+      },
+      {
+        "path": "tests/fixtures/normal.docx",
+        "type": "file",
+        "branch": "dev",
+        "purpose": "合格论文模板（格式完全正确的对照标准）"
+      },
+      {
+        "path": "tests/fixtures/injected/",
+        "type": "dir",
+        "branch": "dev",
+        "purpose": "错误注入文档（共 20 份，覆盖各类错误类型）"
+      },
+      {
+        "path": "tests/run_tests.py",
+        "type": "file",
+        "branch": "dev",
+        "purpose": "测试运行脚本：遍历 fixtures 下所有 docx → 跑完整审查流程 → normal 应 0 报错，injected 应报出预期错误 → 输出查全率/误报率统计"
+      },
+      {
+        "path": ".gitignore",
+        "type": "file",
+        "branch": "dev",
+        "purpose": "排除规则：__pycache__/ .venv/ .env/ 等运行环境产物"
+      },
+      {
+        "path": "pyproject.toml",
+        "type": "file",
+        "branch": "master",
+        "purpose": "开发工具统一配置（ruff 规则、pytest 参数等）"
+      },
+      {
+        "path": "requirements.txt",
+        "type": "file",
+        "branch": "master",
+        "purpose": "Python 依赖清单（python-docx、httpx、pydantic）"
+      },
+      {
+        "path": "README.md",
+        "type": "file",
+        "branch": "master",
+        "purpose": "给用户看的说明（功能简介、运行命令、模块负责人一览）"
+      }
+    ]
+  },
+
+  "team_conventions": {
+    "coding_standards": {
+      "language": "代码注释用中文，变量/函数命名用英文",
+      "naming_style": "函数/变量 snake_case，类 PascalCase",
+      "type_hints": "每个函数必须有输入输出类型注解（Type Hints）",
+      "module_interface": "每个模块对外暴露的函数必须有明确的输入输出类型注解",
+      "code_style": "PEP 8，ruff 格式化",
+      "commit_format": "每次提交必须要有日志说明做了什么事（格式：<type>: <中文描述>）",
+      "commit_types": ["feat（新功能）", "fix（修复）", "refactor（重构）", "docs（文档）", "test（测试）", "chore（杂项）"]
+    },
+    "team_collaboration": {
+      "json_template_policy": "审查者各自制定自己的报错 JSON 模板（输出结构样例），不用统一格式",
+      "parser_template": "文档拆解者定义 7 个单元的统一结构化 JSON 模板（输出格式样例），供所有审查者参照",
+      "rollback_programming": "审查者基于自己的模板设计输出结构 → 再编码实现，确保输出格式可控",
+      "reporter_adaptation": "汇总者接收各审查者的 JSON，按各自模板适配，不做统一强制"
+    }
+  }
+}
