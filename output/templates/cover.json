@@ -1,0 +1,73 @@
+{
+  "_说明": "封面段落列表。items 为 ParaInfo[] 数组。",
+  "_字段": {
+    "file_name": "原始 docx 文件名",
+    "unit": "单元标识: cover",
+    "count": "封面段落总数",
+    "page": "页面设置（所有文件共用结构）",
+    "headers_footers": "文档各节的页眉页脚内容与格式，按节分组",
+    "items": "封面段落数组，每个元素为 ParaInfo"
+  },
+  "file_name": "<string>",
+  "unit": "cover",
+  "count": "<int>",
+  "page": {
+    "width_cm": "<float | null> 页面宽度 cm",
+    "height_cm": "<float | null> 页面高度 cm",
+    "top_margin_cm": "<float | null> 上边距 cm",
+    "bottom_margin_cm": "<float | null> 下边距 cm",
+    "left_margin_cm": "<float | null> 左边距 cm",
+    "right_margin_cm": "<float | null> 右边距 cm",
+    "orientation": "<portrait | landscape> 纸张方向"
+  },
+  "headers_footers": [
+    {
+      "section_index": "<int> 节序号（从0开始）",
+      "different_first_page": "<bool> 首页页眉/页脚是否不同",
+      "even_and_odd_pages": "<bool> 是否区分奇偶页",
+      "header_default": {
+        "paragraphs": ["...ParaInfo[] 默认页眉段落"],
+        "is_linked_to_previous": "<bool> 是否链接到上一节"
+      },
+      "header_first": "同上结构 或 null 首页页眉（仅当different_first_page=true时不为null）",
+      "header_even": "同上结构 或 null 偶数页页眉（仅当even_and_odd_pages=true时不为null）",
+      "footer_default": {
+        "paragraphs": ["...ParaInfo[] 默认页脚段落"],
+        "is_linked_to_previous": "<bool> 是否链接到上一节"
+      },
+      "footer_first": "同上结构 或 null",
+      "footer_even": "同上结构 或 null"
+    }
+  ],
+  "items": [
+    {
+      "index": "<int> 段落序号，从0开始",
+      "text": "<string> 段落文本",
+      "style_name": "<string> docx样式名",
+      "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null> 对齐方式",
+      "line_spacing": "<float | null> 行间距 pt",
+      "space_before": "<float | null> 段前间距 pt",
+      "space_after": "<float | null> 段后间距 pt",
+      "first_line_indent": "<float | null> 首行缩进 pt",
+      "runs": [
+        {
+          "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+          "font_name": "<string | null> 字体名",
+          "font_size": "<float | null> 字号 pt",
+          "bold": "<bool | null> 加粗",
+          "italic": "<bool | null> 斜体",
+          "underline": "<bool | null> 下划线"
+        }
+      ],
+      "images": [
+        {
+          "name": "<string> 图片描述名",
+          "file_name": "<string> 图片文件名",
+          "width_cm": "<float | null> 宽度 cm",
+          "height_cm": "<float | null> 高度 cm"
+        }
+      ],
+      "state": "<string> 状态机归类，封面固定为 cover"
+    }
+  ]
+}

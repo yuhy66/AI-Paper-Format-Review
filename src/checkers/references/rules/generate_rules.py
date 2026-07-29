@@ -5,7 +5,7 @@ import json
 import os
 
 
-def build():
+def build() -> dict:
     rules = {
         "meta": {
             "standard_name": "GB/T 7714-2025",
