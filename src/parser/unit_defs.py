@@ -14,7 +14,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
 
-
 # ============================================================
 # 枚举：状态机状态 + 最终归类单元
 # ============================================================
@@ -22,7 +21,7 @@ from typing import Optional, Any
 class ParseState(Enum):
     """顺序状态机的状态 —— 按论文自然行文顺序排列"""
     COVER = "cover"
-    STATEMENT = "statement"          # 学术诚信声明 / 原创性声明等
+    STATEMENT = "statement"          # 学术诚信声明 
     TITLE_PAGE = "title_page"
     ABSTRACT = "abstract"
     TOC = "toc"
