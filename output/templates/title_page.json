@@ -1,0 +1,73 @@
+{
+  "_说明": "扉页段落列表。触发信号：版权使用授权书/Copyright 关键词，或声明页结束后出现的 题目/论文题目/Title 独立行。items 为 ParaInfo[] 数组。",
+  "_字段": {
+    "file_name": "原始 docx 文件名",
+    "unit": "单元标识: title_page",
+    "count": "扉页段落总数",
+    "page": "页面设置",
+    "headers_footers": "文档各节的页眉页脚内容与格式，按节分组",
+    "items": "扉页段落数组（题目、姓名、学号、院系等字段）"
+  },
+  "file_name": "<string>",
+  "unit": "title_page",
+  "count": "<int>",
+  "page": {
+    "width_cm": "<float | null>",
+    "height_cm": "<float | null>",
+    "top_margin_cm": "<float | null>",
+    "bottom_margin_cm": "<float | null>",
+    "left_margin_cm": "<float | null>",
+    "right_margin_cm": "<float | null>",
+    "orientation": "<portrait | landscape>"
+  },
+  "headers_footers": [
+    {
+      "section_index": "<int> 节序号（从0开始）",
+      "different_first_page": "<bool> 首页页眉/页脚是否不同",
+      "even_and_odd_pages": "<bool> 是否区分奇偶页",
+      "header_default": {
+        "paragraphs": ["...ParaInfo[] 默认页眉段落"],
+        "is_linked_to_previous": "<bool>"
+      },
+      "header_first": "同上结构 或 null",
+      "header_even": "同上结构 或 null",
+      "footer_default": {
+        "paragraphs": ["...ParaInfo[] 默认页脚段落"],
+        "is_linked_to_previous": "<bool>"
+      },
+      "footer_first": "同上结构 或 null",
+      "footer_even": "同上结构 或 null"
+    }
+  ],
+  "items": [
+    {
+      "index": "<int>",
+      "text": "<string>",
+      "style_name": "<string>",
+      "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null>",
+      "line_spacing": "<float | null>",
+      "space_before": "<float | null>",
+      "space_after": "<float | null>",
+      "first_line_indent": "<float | null>",
+      "runs": [
+        {
+          "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+          "font_name": "<string | null>",
+          "font_size": "<float | null>",
+          "bold": "<bool | null>",
+          "italic": "<bool | null>",
+          "underline": "<bool | null>"
+        }
+      ],
+      "images": [
+        {
+          "name": "<string>",
+          "file_name": "<string>",
+          "width_cm": "<float | null>",
+          "height_cm": "<float | null>"
+        }
+      ],
+      "state": "<string> 固定为 title_page"
+    }
+  ]
+}

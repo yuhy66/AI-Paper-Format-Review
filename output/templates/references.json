@@ -1,0 +1,77 @@
+{
+  "_说明": "参考文献条目列表。items 为 ReferenceInfo[] 数组。",
+  "_字段": {
+    "file_name": "原始 docx 文件名",
+    "unit": "单元标识: references",
+    "count": "参考文献总数",
+    "page": "页面设置",
+    "headers_footers": "文档各节的页眉页脚内容与格式，按节分组",
+    "items": "参考文献数组，每个元素含 index、ref_number、para（完整文本见 para.text）"
+  },
+  "file_name": "<string>",
+  "unit": "references",
+  "count": "<int>",
+  "page": {
+    "width_cm": "<float | null>",
+    "height_cm": "<float | null>",
+    "top_margin_cm": "<float | null>",
+    "bottom_margin_cm": "<float | null>",
+    "left_margin_cm": "<float | null>",
+    "right_margin_cm": "<float | null>",
+    "orientation": "<portrait | landscape>"
+  },
+  "headers_footers": [
+    {
+      "section_index": "<int> 节序号（从0开始）",
+      "different_first_page": "<bool> 首页页眉/页脚是否不同",
+      "even_and_odd_pages": "<bool> 是否区分奇偶页",
+      "header_default": {
+        "paragraphs": ["...ParaInfo[] 默认页眉段落"],
+        "is_linked_to_previous": "<bool> 是否链接到上一节"
+      },
+      "header_first": "同上结构 或 null 首页页眉",
+      "header_even": "同上结构 或 null 偶数页页眉",
+      "footer_default": {
+        "paragraphs": ["...ParaInfo[] 默认页脚段落"],
+        "is_linked_to_previous": "<bool>"
+      },
+      "footer_first": "同上结构 或 null",
+      "footer_even": "同上结构 或 null"
+    }
+  ],
+  "items": [
+    {
+      "index": "<int> 参考文献序号，从1开始",
+      "ref_number": "<string> 引用标记（如'[1]'、'①'）",
+      "para": {
+        "index": "<int> 该条目段落序号",
+        "text": "<string>",
+        "style_name": "<string>",
+        "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null>",
+        "line_spacing": "<float | null>",
+        "space_before": "<float | null>",
+        "space_after": "<float | null>",
+        "first_line_indent": "<float | null>",
+        "runs": [
+          {
+            "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+            "font_name": "<string | null>",
+            "font_size": "<float | null>",
+            "bold": "<bool | null>",
+            "italic": "<bool | null>",
+            "underline": "<bool | null>"
+          }
+        ],
+        "images": [
+          {
+            "name": "<string>",
+            "file_name": "<string>",
+            "width_cm": "<float | null>",
+            "height_cm": "<float | null>"
+          }
+        ],
+        "state": "<string> 固定为 references"
+      }
+    }
+  ]
+}

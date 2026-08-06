@@ -1,0 +1,137 @@
+{
+  "_说明": "摘要单元（支持中英双摘要+双关键词）。items 为 AbstractInfo[] 数组。",
+  "_字段": {
+    "file_name": "原始 docx 文件名",
+    "unit": "单元标识: abstract",
+    "count": "摘要单元数（通常为1）",
+    "page": "页面设置",
+    "headers_footers": "文档各节的页眉页脚内容与格式，按节分组",
+    "items": "摘要数组，每个元素含 title、body、keywords 三部分"
+  },
+  "file_name": "<string>",
+  "unit": "abstract",
+  "count": "<int>",
+  "page": {
+    "width_cm": "<float | null>",
+    "height_cm": "<float | null>",
+    "top_margin_cm": "<float | null>",
+    "bottom_margin_cm": "<float | null>",
+    "left_margin_cm": "<float | null>",
+    "right_margin_cm": "<float | null>",
+    "orientation": "<portrait | landscape>"
+  },
+  "headers_footers": [
+    {
+      "section_index": "<int> 节序号（从0开始）",
+      "different_first_page": "<bool> 首页页眉/页脚是否不同",
+      "even_and_odd_pages": "<bool> 是否区分奇偶页",
+      "header_default": {
+        "paragraphs": ["...ParaInfo[] 默认页眉段落"],
+        "is_linked_to_previous": "<bool>"
+      },
+      "header_first": "同上结构 或 null",
+      "header_even": "同上结构 或 null",
+      "footer_default": {
+        "paragraphs": ["...ParaInfo[] 默认页脚段落"],
+        "is_linked_to_previous": "<bool>"
+      },
+      "footer_first": "同上结构 或 null",
+      "footer_even": "同上结构 或 null"
+    }
+  ],
+  "items": [
+    {
+      "title": {
+        "index": "<int> 摘要标题段（如'摘要'）",
+        "text": "<string>",
+        "style_name": "<string>",
+        "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null>",
+        "line_spacing": "<float | null>",
+        "space_before": "<float | null>",
+        "space_after": "<float | null>",
+        "first_line_indent": "<float | null>",
+        "runs": [
+          {
+            "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+            "font_name": "<string | null>",
+            "font_size": "<float | null>",
+            "bold": "<bool | null>",
+            "italic": "<bool | null>",
+            "underline": "<bool | null>"
+          }
+        ],
+        "images": [
+          {
+            "name": "<string>",
+            "file_name": "<string>",
+            "width_cm": "<float | null>",
+            "height_cm": "<float | null>"
+          }
+        ],
+        "state": "<string> 固定为 abstract"
+      },
+      "body": [
+        {
+          "index": "<int> 摘要正文段（含中英文正文、英文标题、空行）",
+          "text": "<string>",
+          "style_name": "<string>",
+          "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null>",
+          "line_spacing": "<float | null>",
+          "space_before": "<float | null>",
+          "space_after": "<float | null>",
+          "first_line_indent": "<float | null>",
+          "runs": [
+            {
+              "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+              "font_name": "<string | null>",
+              "font_size": "<float | null>",
+              "bold": "<bool | null>",
+              "italic": "<bool | null>",
+              "underline": "<bool | null>"
+            }
+          ],
+          "images": [
+            {
+              "name": "<string>",
+              "file_name": "<string>",
+              "width_cm": "<float | null>",
+              "height_cm": "<float | null>"
+            }
+          ],
+          "state": "<string> 固定为 abstract"
+        }
+      ],
+      "keywords": [
+        {
+          "index": "<int> 关键词行（中文第1行，英文第2行）",
+          "text": "<string>",
+          "style_name": "<string>",
+          "alignment": "<LEFT | CENTER | RIGHT | JUSTIFY | null>",
+          "line_spacing": "<float | null>",
+          "space_before": "<float | null>",
+          "space_after": "<float | null>",
+          "first_line_indent": "<float | null>",
+          "runs": [
+            {
+              "text": "<string> 文本片段（单run段落省略，文字见父级text）",
+              "font_name": "<string | null>",
+              "font_size": "<float | null>",
+              "bold": "<bool | null>",
+              "italic": "<bool | null>",
+              "underline": "<bool | null>"
+            }
+          ],
+          "images": [
+            {
+              "name": "<string>",
+              "file_name": "<string>",
+              "width_cm": "<float | null>",
+              "height_cm": "<float | null>"
+            }
+          ],
+          "state": "<string> 固定为 abstract"
+        }
+      ]
+    }
+  ]
+}
