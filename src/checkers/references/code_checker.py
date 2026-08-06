@@ -10,7 +10,8 @@
   ⑦ numbering_duplicate  — 编号重复（error）
   ⑧ no_trailing_period   — 末尾缺少句点（error）
 
-输入: output/parser_json/parser.json（由文档拆解团队提供）
+输入: output/parser_json/references.json（文档拆解团队输出，模板见
+      output/templates/references.json）
 输出: output/checker_json/ref_code.json（模板已固定）
 """
 
@@ -84,27 +85,29 @@ def _build_record(
 #  提取阶段
 # ===================================================================
 
-def _extract_ref_entries(paragraphs: list[dict]) -> list[RefEntry]:
-    """从段落列表解析出每条参考文献的元信息。
+def _extract_ref_entries(items: list[dict]) -> list[RefEntry]:
+    """从 references.json 的 items 列表解析出每条参考文献的元信息。
 
-    对每条先后尝试：
-      1. 方括号匹配  [数字] / [abc] / [2.5] …
-      2. 失败则尝试行首数字匹配  "3. 王六. …"
-      3. 都失败则回退到 1-based 顺位置
+    对每条 item：
+      1. 优先解析 item["ref_number"]（parser 已提取的引用标记，如 '[1]'）
+      2. ref_number 为空时回退到从 para.text 正则提取
+      3. alignment 取自 para.alignment，缺省 UNKNOWN
 
     提取字段：
       position, paragraph_index, text, alignment,
-      ref_index, ref_label,
+      ref_index, ref_label, ref_number_raw,
       has_bracket_pair, bracket_content,
       is_numeric_bracket, is_integer_bracket,
       has_valid_number, ends_with_period
     """
     entries: list[RefEntry] = []
 
-    for idx, para in enumerate(paragraphs, start=1):
+    for idx, item in enumerate(items, start=1):
+        para = item.get("para") or {}
         text = para.get("text", "").strip()
-        alignment = para.get("alignment", "UNKNOWN")
+        alignment = para.get("alignment", "UNKNOWN") or "UNKNOWN"
         para_index = para.get("index", idx)
+        ref_number = item.get("ref_number", "").strip()
 
         entry: RefEntry = {
             "position": idx,               # 1-based 顺序位置（fallback）
@@ -113,6 +116,7 @@ def _extract_ref_entries(paragraphs: list[dict]) -> list[RefEntry]:
             "alignment": alignment,
             "ref_index": idx,              # 优先从编号中提取
             "ref_label": str(idx),
+            "ref_number_raw": ref_number,  # parser 提供的原始引用标记
             "has_bracket_pair": False,
             "bracket_content": None,
             "is_numeric_bracket": False,   # 方括号内容是否为数值
@@ -121,39 +125,90 @@ def _extract_ref_entries(paragraphs: list[dict]) -> list[RefEntry]:
             "ends_with_period": text.rstrip().endswith("."),
         }
 
-        # ── 1. 方括号匹配 ──
-        m_bracket = RE_BRACKET_ANY.match(text)
-        if m_bracket:
-            content = m_bracket.group(1)
-            entry["has_bracket_pair"] = True
-            entry["bracket_content"] = content
-            entry["ref_label"] = f"[{content}]"
+        # ── 1. 优先解析 ref_number ──
+        if ref_number:
+            _parse_ref_number(entry, ref_number)
 
-            if content.isdigit():
-                # 纯整数: [3]
-                entry["is_numeric_bracket"] = True
-                entry["is_integer_bracket"] = True
-                entry["has_valid_number"] = True
-                parsed = int(content)
-                entry["ref_index"] = parsed
-                entry["ref_label"] = f"[{parsed}]"
-            elif _is_single_decimal(content):
-                # 含小数点: [2.5]
-                entry["is_numeric_bracket"] = True
-                entry["is_integer_bracket"] = False
-                # ref_index 保留 position 值，不误覆盖
-            # 否则: 非数字括号格式，各项保持默认
-        else:
-            # ── 2. 无方括号 → 行首数字 ──
-            m_num = RE_LEADING_NUM.match(text)
-            if m_num:
-                entry["ref_index"] = int(m_num.group(1))
-                entry["ref_label"] = m_num.group(1)
-                entry["has_valid_number"] = True
+        # ── 2. 回退：ref_number 为空且未提取到数字时，从 text 提取 ──
+        if not entry["has_bracket_pair"] and not entry["has_valid_number"]:
+            _parse_from_text(entry, text)
 
         entries.append(entry)
 
     return entries
+
+
+def _parse_ref_number(entry: RefEntry, ref_number: str) -> None:
+    """解析引用标记 ref_number，如 '[1]' / '[abc]' / '[2.5]' / '①' / '1.'。
+
+    方括号 [数字] → 提取整数编号
+    方括号 [小数] → 标记非整数
+    方括号 [非数字] → 标记非数字括号
+    其他格式（圈数字、纯数字等）→ 保持无方括号状态，由 no_brackets 检查捕获
+    """
+    content = ref_number.strip()
+
+    # ── 方括号形式 [xxx] ──
+    if content.startswith("[") and content.endswith("]"):
+        inner = content[1:-1]
+        entry["has_bracket_pair"] = True
+        entry["bracket_content"] = inner
+        entry["ref_label"] = f"[{inner}]"
+
+        if inner.isdigit():
+            # 纯整数: [3]
+            entry["is_numeric_bracket"] = True
+            entry["is_integer_bracket"] = True
+            entry["has_valid_number"] = True
+            parsed = int(inner)
+            entry["ref_index"] = parsed
+            entry["ref_label"] = f"[{parsed}]"
+        elif _is_single_decimal(inner):
+            # 含小数点: [2.5]
+            entry["is_numeric_bracket"] = True
+            entry["is_integer_bracket"] = False
+            # ref_index 保留 position 值，不误覆盖
+        # 否则: 非数字括号格式，各项保持默认
+        return
+
+    # ── 非方括号格式：尝试行首数字（如 '3' / '3.' / '3)'）──
+    m_num = RE_LEADING_NUM.match(content)
+    if m_num:
+        entry["ref_index"] = int(m_num.group(1))
+        entry["ref_label"] = m_num.group(1)
+        entry["has_valid_number"] = True
+    # 圈数字（①、②…）等其他格式：无方括号状态，由 no_brackets 检查捕获
+
+
+def _parse_from_text(entry: RefEntry, text: str) -> None:
+    """回退逻辑：从段落文本提取编号（ref_number 缺失时的兜底）。"""
+    if not text:
+        return
+    m_bracket = RE_BRACKET_ANY.match(text)
+    if m_bracket:
+        content = m_bracket.group(1)
+        entry["has_bracket_pair"] = True
+        entry["bracket_content"] = content
+        entry["ref_label"] = f"[{content}]"
+
+        if content.isdigit():
+            entry["is_numeric_bracket"] = True
+            entry["is_integer_bracket"] = True
+            entry["has_valid_number"] = True
+            parsed = int(content)
+            entry["ref_index"] = parsed
+            entry["ref_label"] = f"[{parsed}]"
+        elif _is_single_decimal(content):
+            entry["is_numeric_bracket"] = True
+            entry["is_integer_bracket"] = False
+        return
+
+    # 无方括号 → 行首数字
+    m_num = RE_LEADING_NUM.match(text)
+    if m_num:
+        entry["ref_index"] = int(m_num.group(1))
+        entry["ref_label"] = m_num.group(1)
+        entry["has_valid_number"] = True
 
 
 def _is_single_decimal(s: str) -> bool:
@@ -199,12 +254,15 @@ def _check_no_brackets(entries: list[RefEntry]) -> list[dict]:
             continue
         if e["has_bracket_pair"]:
             continue
-        m = RE_LEADING_NUM.match(e["text"])
-        actual_detail = (
-            f"当前行首直接以数字{m.group(1)}开头，无方括号"
-            if m
-            else "当前行首无法识别编号格式"
-        )
+        if e["ref_number_raw"]:
+            actual_detail = f"当前引用标记为 {e['ref_number_raw']}，不是[数字]方括号格式"
+        else:
+            m = RE_LEADING_NUM.match(e["text"])
+            actual_detail = (
+                f"当前行首直接以数字{m.group(1)}开头，无方括号"
+                if m
+                else "当前条目缺少引用标记（ref_number 为空）"
+            )
         errors.append(
             _build_record(
                 severity="error",
@@ -380,12 +438,12 @@ def _check_no_trailing_period(entries: list[RefEntry]) -> list[dict]:
 #  公共接口
 # ===================================================================
 
-def check(paragraphs: list[dict], source_file: str = "") -> dict:
-    """对参考文献段落列表执行全部 8 项检查。
+def check(items: list[dict], source_file: str = "") -> dict:
+    """对参考文献 items 列表执行全部 8 项检查。
 
     Args:
-        paragraphs: parser.json 中 ``sections.references.paragraphs`` 列表。
-                    每项包含 index / text / alignment 字段。
+        items: references.json 中 ``items`` 列表，每项包含
+               index / ref_number / para（para 内含 text / alignment / index）。
         source_file: 来源文件名，仅用于回显。
 
     Returns:
@@ -394,12 +452,14 @@ def check(paragraphs: list[dict], source_file: str = "") -> dict:
     Example::
 
         result = check([
-            {"index": 1, "text": "[1] 张三. 书[M]. 北京: 出版社, 2025.", "alignment": "LEFT"},
+            {"index": 1, "ref_number": "[1]",
+             "para": {"index": 100, "text": "[1] 张三. 书[M]. 北京: 出版社, 2025.",
+                      "alignment": "LEFT"}},
         ])
         print(result["summary"]["status"])   # "pass" | "fail"
     """
-    # ── 空段落兜底 ──
-    if not paragraphs:
+    # ── 空列表兜底 ──
+    if not items:
         now = datetime.now().isoformat()
         return {
             "checker": CHECKER_ID,
@@ -417,7 +477,7 @@ def check(paragraphs: list[dict], source_file: str = "") -> dict:
         }
 
     # ── 提取 → 逐一检查 ──
-    entries = _extract_ref_entries(paragraphs)
+    entries = _extract_ref_entries(items)
 
     all_errors: list[dict] = []
     all_warnings: list[dict] = []
@@ -454,10 +514,10 @@ def check(paragraphs: list[dict], source_file: str = "") -> dict:
 
 
 def run(input_path: str | Path, output_path: str | Path) -> dict:
-    """读 parser.json → 执行 check() → 写 ref_code.json。
+    """读 references.json → 执行 check() → 写 ref_code.json。
 
     Args:
-        input_path: parser.json 路径。
+        input_path: references.json 路径。
         output_path: ref_code.json 输出路径。
 
     Returns:
@@ -469,11 +529,10 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
     with open(input_path, "r", encoding="utf-8") as f:
         data: dict = json.load(f)
 
-    source_file = data.get("source_file", input_path.name)
-    ref_section = data.get("sections", {}).get("references", {})
-    paragraphs = ref_section.get("paragraphs", [])
+    source_file = data.get("file_name", input_path.name)
+    items = data.get("items", [])
 
-    result = check(paragraphs, source_file=source_file)
+    result = check(items, source_file=source_file)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -491,7 +550,7 @@ if __name__ == "__main__":
 
     # 从当前文件位置推算项目根目录（向上 4 级）
     _PROJECT_ROOT = Path(__file__).resolve().parents[4]
-    _DEFAULT_INPUT = _PROJECT_ROOT / "output" / "parser_json" / "parser.json"
+    _DEFAULT_INPUT = _PROJECT_ROOT / "output" / "parser_json" / "references.json"
     _DEFAULT_OUTPUT = _PROJECT_ROOT / "output" / "checker_json" / "ref_code.json"
 
     input_path = sys.argv[1] if len(sys.argv) > 1 else str(_DEFAULT_INPUT)
