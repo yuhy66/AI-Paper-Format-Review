@@ -196,6 +196,40 @@ class TestTitlePage:
         assert "专业" in errors[0]["description"]
 
 
+class TestTitlePageTitle:
+    """扉页中文题目格式检查（黑体二号居中）。"""
+
+    def test_wrong_font(self):
+        tp = _clean_title_page()
+        tp[0] = _title_para(10, "基于深度学习的图像识别方法研究", east_asia="宋体")
+        result = check(_clean_cover(), tp, _clean_statement(), _page())
+        errors = _find(result, "title_page_title_font")
+        assert len(errors) == 1
+        assert "宋体" in errors[0]["actual"]
+
+    def test_wrong_size(self):
+        tp = _clean_title_page()
+        tp[0] = _title_para(10, "基于深度学习的图像识别方法研究", font_size=16.0)
+        result = check(_clean_cover(), tp, _clean_statement(), _page())
+        errors = _find(result, "title_page_title_size")
+        assert len(errors) == 1
+        assert "16.0" in errors[0]["actual"]
+
+    def test_wrong_align(self):
+        tp = _clean_title_page()
+        tp[0] = _title_para(10, "基于深度学习的图像识别方法研究", alignment="LEFT")
+        result = check(_clean_cover(), tp, _clean_statement(), _page())
+        errors = _find(result, "title_page_title_align")
+        assert len(errors) == 1
+        assert "左对齐" in errors[0]["actual"]
+
+    def test_title_missing_no_cjk(self):
+        """扉页无中文题目（仅英文）→ title_page_title_missing。"""
+        tp = [_title_para(10, "Image Recognition Based on Deep Learning")]
+        result = check(_clean_cover(), tp, _clean_statement(), _page())
+        assert _find(result, "title_page_title_missing")
+
+
 # ===================================================================
 #  声明 / 页面检查
 # ===================================================================

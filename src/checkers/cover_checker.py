@@ -10,11 +10,15 @@
   ⑤ cover_title_font        — 论文题目字体不是黑体（error）
   ⑥ cover_title_size        — 论文题目字号不是二号（error）
   ⑦ cover_title_align       — 论文题目未居中（error）
-  ⑧ title_page_empty        — 扉页为空（error）
-  ⑨ title_page_missing_field— 扉页缺少必填字段（error）
-  ⑩ statement_missing       — 未检测到学术诚信声明（warning）
-  ⑪ page_not_a4             — 页面尺寸不是 A4（error）
-  ⑫ page_margin             — 页边距不符合规范（error）
+  ⑧ title_page_empty         — 扉页为空（error）
+  ⑨ title_page_missing_field — 扉页缺少必填字段（error）
+  ⑩ title_page_title_missing — 未定位到扉页题目（error）
+  ⑪ title_page_title_font    — 扉页题目字体不是黑体（error）
+  ⑫ title_page_title_size    — 扉页题目字号不是二号（error）
+  ⑬ title_page_title_align   — 扉页题目未居中（error）
+  ⑭ statement_missing        — 未检测到学术诚信声明（warning）
+  ⑮ page_not_a4              — 页面尺寸不是 A4（error）
+  ⑯ page_margin              — 页边距不符合规范（error）
 
 输入: output/parser_json/ 下的 cover.json / title_page.json / statement.json
 输出: output/checker_json/cover.json
@@ -140,13 +144,21 @@ def _max_run_size(para: dict) -> float:
     return max(sizes) if sizes else -1.0
 
 
-def _find_title(paras: list[dict]) -> dict | None:
+def _contains_cjk(text: str) -> bool:
+    """判断文本是否含中日韩汉字（用于区分中文/英文题目）。"""
+    return any("一" <= ch <= "鿿" for ch in text)
+
+
+def _find_title(paras: list[dict], cjk_only: bool = False) -> dict | None:
     """在封面/扉页段落中定位论文题目。
 
     启发式：取非空段落中字号最大的那一段（题目为二号，通常是封面最大字号），
-    并列时取文本更长的一段。
+    并列时取文本更长的一段。cjk_only=True 时只在中含汉字的段落中定位（用于
+    扉页——中英文题目同为二号时，确保命中中文题目做字体判等）。
     """
     candidates = [p for p in paras if (p.get("text") or "").strip()]
+    if cjk_only:
+        candidates = [p for p in candidates if _contains_cjk(p.get("text", ""))]
     if not candidates:
         return None
     return max(candidates, key=lambda p: (_max_run_size(p), len(p.get("text", ""))))
@@ -211,25 +223,36 @@ def _check_cover_title_missing(cover_items: list[dict], title: dict | None) -> l
     ]
 
 
-def _check_cover_title_format(title: dict) -> list[dict]:
-    """④⑤⑥⑦ 论文题目长度 + 字体/字号/对齐（黑体二号居中）。"""
-    errors: list[dict] = []
+def _check_cover_title_length(title: dict) -> list[dict]:
+    """④ 论文题目超过 25 字。"""
     idx = title.get("index", 0)
     text = title.get("text", "")
     preview = _truncate(text)
-
-    # 长度：不超过 25 字
     length = len(text.strip())
-    if length > TITLE_MAX_CHARS:
-        errors.append(
-            _build_record(
-                "error", "cover_title_too_long",
-                f"论文题目超过 {TITLE_MAX_CHARS} 字",
-                f"论文题目一般不宜超过 {TITLE_MAX_CHARS} 字（必要时可加副标题）",
-                f"当前题目共 {length} 字",
-                idx, preview,
-            )
+    if length <= TITLE_MAX_CHARS:
+        return []
+    return [
+        _build_record(
+            "error", "cover_title_too_long",
+            f"论文题目超过 {TITLE_MAX_CHARS} 字",
+            f"论文题目一般不宜超过 {TITLE_MAX_CHARS} 字（必要时可加副标题）",
+            f"当前题目共 {length} 字",
+            idx, preview,
         )
+    ]
+
+
+def _check_title_format(title: dict, prefix: str, label: str) -> list[dict]:
+    """题目字体/字号/对齐检查（黑体二号居中），封面与扉页题目共用。
+
+    Args:
+        title:  题目段落（由 _find_title 定位）。
+        prefix: category 前缀（cover_title / title_page_title）。
+        label:  描述用词（论文题目 / 扉页题目）。
+    """
+    errors: list[dict] = []
+    idx = title.get("index", 0)
+    preview = _truncate(title.get("text", ""))
 
     # 字体：黑体
     bad_fonts = {_run_font(r) for r in _para_runs(title)} - _FONT_HEITI
@@ -237,9 +260,9 @@ def _check_cover_title_format(title: dict) -> list[dict]:
     if bad_fonts:
         errors.append(
             _build_record(
-                "error", "cover_title_font",
-                "论文题目字体不是黑体",
-                "论文题目应使用黑体",
+                "error", f"{prefix}_font",
+                f"{label}字体不是黑体",
+                f"{label}应使用黑体",
                 f"当前字体为 {'、'.join(sorted(bad_fonts))}",
                 idx, preview,
             )
@@ -250,9 +273,9 @@ def _check_cover_title_format(title: dict) -> list[dict]:
     if sizes and not all(_eq_size(s, PT_ER_HAO) for s in sizes):
         errors.append(
             _build_record(
-                "error", "cover_title_size",
-                "论文题目字号不是二号",
-                "论文题目应为二号（22pt）",
+                "error", f"{prefix}_size",
+                f"{label}字号不是二号",
+                f"{label}应为二号（22pt）",
                 f"当前字号为 {'、'.join(str(s) for s in sizes)}pt",
                 idx, preview,
             )
@@ -263,15 +286,30 @@ def _check_cover_title_format(title: dict) -> list[dict]:
     if align != "center":
         errors.append(
             _build_record(
-                "error", "cover_title_align",
-                "论文题目未居中",
-                "论文题目应居中（alignment == CENTER）",
+                "error", f"{prefix}_align",
+                f"{label}未居中",
+                f"{label}应居中（alignment == CENTER）",
                 f"当前对齐方式为 {_ALIGNMENT_NAMES.get(align.upper(), align)}",
                 idx, preview,
             )
         )
 
     return errors
+
+
+def _check_title_page_title_missing(title_page_items: list[dict], title: dict | None) -> list[dict]:
+    """⑩ 未定位到扉页题目。"""
+    if not title_page_items or title is not None:
+        return []
+    return [
+        _build_record(
+            "error", "title_page_title_missing",
+            "未定位到扉页题目",
+            "扉页应包含中英文题目（中文题目黑体二号居中）",
+            "无法在扉页段落中识别出题目",
+            0, _truncate(_join_text(title_page_items)),
+        )
+    ]
 
 
 def _check_title_page_empty(title_page_items: list[dict]) -> list[dict]:
@@ -416,11 +454,16 @@ def check(
     title = _find_title(cover_items)
     all_errors.extend(_check_cover_title_missing(cover_items, title))
     if title is not None:
-        all_errors.extend(_check_cover_title_format(title))
+        all_errors.extend(_check_cover_title_length(title))
+        all_errors.extend(_check_title_format(title, "cover_title", "论文题目"))
 
     # 扉页
     all_errors.extend(_check_title_page_empty(title_page_items))
     all_errors.extend(_check_title_page_missing_field(title_page_items))
+    tp_title = _find_title(title_page_items, cjk_only=True)
+    all_errors.extend(_check_title_page_title_missing(title_page_items, tp_title))
+    if tp_title is not None:
+        all_errors.extend(_check_title_format(tp_title, "title_page_title", "扉页题目"))
 
     # 声明
     all_warnings.extend(_check_statement_missing(statement_items))
