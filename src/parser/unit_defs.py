@@ -73,7 +73,8 @@ def _clean_dict(d: dict) -> dict:
 class RunInfo:
     """一个 run 的格式信息（python-docx 中段落内的最小格式单元）"""
     text: str
-    font_name: Optional[str] = None
+    font_name: Optional[str] = None         # 西文字体（w:ascii / w:hAnsi）
+    east_asia_font: Optional[str] = None    # 中文字体（w:eastAsia），宋体/黑体等
     font_size: Optional[float] = None       # 磅值 pt
     bold: Optional[bool] = None
     italic: Optional[bool] = None

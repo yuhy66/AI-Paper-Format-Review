@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Optional
 from docx import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from docx.text.run import Run
 
@@ -88,9 +89,18 @@ _ALIGNMENT_MAP = {
 def _extract_run_info(run: Run) -> RunInfo:
     """提取单个 run 的格式信息"""
     font = run.font
+
+    # 中文字体（w:eastAsia）：python-docx 的 font.name 只返回西文字体（ascii/hAnsi），
+    # 中文论文需要单独读 eastAsia 才能拿到宋体/黑体等中文字体名
+    east_asia = None
+    r_pr = run._element.rPr
+    if r_pr is not None and r_pr.rFonts is not None:
+        east_asia = r_pr.rFonts.get(qn("w:eastAsia"))
+
     return RunInfo(
         text=run.text,
         font_name=font.name if font.name else None,
+        east_asia_font=east_asia,
         font_size=font.size.pt if font.size else None,
         bold=font.bold if font.bold is not None else None,
         italic=font.italic if font.italic is not None else None,
