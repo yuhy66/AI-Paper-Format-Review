@@ -1,111 +1,304 @@
-from docx import Document
+"""正文格式检查器（审查4）
+
+依据《中山大学本科毕业论文（设计）写作与印制规范》对正文进行纯代码格式检查：
+
+  ① body_empty                     — 正文为空（error）
+  ② intro_missing                  — 缺少绪论（error）
+  ③ conclusion_missing             — 缺少结论（error）
+  ④ body_word_count_insufficient   — 正文字数少于8000字（error）
+  ⑤ digit_font_not_tnr             — 阿拉伯数字不是 Times New Roman（error）
+  ⑥ english_font_not_tnr           — 英文字母不是 Times New Roman（error）
+  ⑦ year_format_invalid            — 年份格式不正确（warning）
+
+输入: output/parser_json/body.json（文档拆解团队输出）
+输出: output/checker_json/body.json
+"""
+
+from __future__ import annotations
+
+import json
 import re
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-class ContentChecker:
-    def __init__(self):
-        # ========== 论文规范配置区，和截图要求对齐 ==========
-        self.min_content_words = 8000   # 正文最少8000字
-        # 必须出现的三大模块标题
-        self.must_have_sections = ["绪论", "主体", "结论"]
-        # 匹配2位年份，例如 24、26，用来抓错误简写年份
-        self.re_two_digit_year = re.compile(r"\b(1[0-9]|2[0-9])\b")
-        # 存储错误信息
-        self.errors = []
-        # 统计正文总文字
-        self.total_plain_text = ""
+CHECKER_ID = "body"
+CHECKER_NAME = "正文格式检查"
 
+# ── 字体（兼容简繁/英文写法）─────────────────────────────
+_FONT_TIMES = {"times new roman", "timesnewroman"}
 
-    def log_err(self, msg, para_idx=None):
-        """记录错误，和之前代码同一个工具函数"""
-        pos = f"段落{para_idx}:" if para_idx else ""
-        self.errors.append(f"{pos}{msg}")
+# ── 字数要求 ──────────────────────────────────────────────
+MIN_WORDS = 8000
 
+# ── 年份正则（4位数字）────────────────────────────────────
+_RE_YEAR = re.compile(r'\b(\d{4})\b')
 
-    def check_must_section(self, doc: Document):
-        """检查：是否存在 绪论、主体、结论 三大模块"""
-        all_para_text = []
-        for para in doc.paragraphs:
-            txt = para.text.strip()
-            if len(txt) > 0:
-                all_para_text.append(txt)
-
-        # 遍历要求的三个标题
-        for section_name in self.must_have_sections:
-            find_flag = False
-            for text_item in all_para_text:
-                if section_name in text_item:
-                    find_flag = True
-                    break
-            if not find_flag:
-                self.log_err(f"【正文模块缺失】文档没有检测到模块标题：「{section_name}」，正文需要包含：绪论、主体、结论")
+# ── 关键字 ──────────────────────────────────────────────
+INTRO_KEYWORDS = ["绪论", "引言", "前言", "导论"]
+CONCLUSION_KEYWORDS = ["结论", "结语", "总结", "结束语"]
 
 
-    def check_word_count(self, doc: Document):
-        """统计纯正文汉字字符，检查不少于8000字"""
-        self.total_plain_text = ""
-        for para in doc.paragraphs:
-            # 拼接全部段落文字
-            self.total_plain_text += para.text
+# ===================================================================
+#  工具函数
+# ===================================================================
 
-        # 只统计中文字符（过滤空格、换行、英文、数字、标点）
-        chinese_only = re.findall(r'[\u4e00-\u9fff]', self.total_plain_text)
-        real_word_num = len(chinese_only)
-
-        if real_word_num < self.min_content_words:
-            self.log_err(f"【字数不达标】正文汉字统计：{real_word_num}字，要求不少于{self.min_content_words}字")
-        else:
-            print(f"✅正文字数校验通过，汉字数量：{real_word_num}")
+def _truncate(text: str, max_len: int = 80) -> str:
+    text = text.replace("\n", " ").replace("\r", " ").strip()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
 
 
-    def check_year_format(self, doc: Document):
-        """检查年份：禁止2位简写年份，必须4位数字，例如2026，不能写26"""
-        for p_idx, para in enumerate(doc.paragraphs):
-            text = para.text.strip()
-            # 简单启发式：连续两位数字，周围有年字，大概率简写年份
-            if "年" in text:
-                match_list = self.re_two_digit_year.findall(text)
-                for m in match_list:
-                    self.log_err(f"疑似2位简写年份`{m}`，规范要求年份必须4位阿拉伯数字，例：2026", p_idx)
+def _norm(s: Any) -> str:
+    return (str(s) if s is not None else "").strip().lower()
 
 
-    def check_english_number_font(self, doc: Document):
-        """检查英文、阿拉伯数字字体应为 Times New Roman"""
-        # ⚠️重要限制：python‑docx很难区分“这一段哪些字符是数字英文”
-        # run是最小字体单元，一个run内部字体全部一样。
-        # 如果一段里面中文+英文混排，Word会拆成多个run。
-        for p_idx, para in enumerate(doc.paragraphs):
-            for run in para.runs:
-                font = run.font
-                run_text = run.text
-                # 判断这个run里面有没有英文或者阿拉伯数字
-                has_en = re.search(r"[a-zA-Z0-9]", run_text)
-                if has_en:
-                    # 获取字体名称
-                    font_name = font.name
-                    if font_name is None or "Times New Roman" not in font_name:
-                        self.log_err(f"段落{p_idx}包含英文/阿拉伯数字，字体不是Times New Roman，请人工核对", p_idx)
+def _build_record(
+    severity: str,
+    category: str,
+    description: str,
+    expected: str,
+    actual: str,
+    paragraph_index: int,
+    text_preview: str,
+) -> dict:
+    return {
+        "severity": severity,
+        "category": category,
+        "description": description,
+        "expected": expected,
+        "actual": actual,
+        "location": {
+            "paragraph_index": paragraph_index,
+            "text_preview": text_preview,
+        },
+    }
 
 
-    def run_all_check(self, file_path):
-        """总入口，执行全部正文检查"""
-        self.errors.clear()
-        doc = Document(file_path)
+def _para_runs(para: dict) -> list[dict]:
+    return para.get("runs") or []
 
-        self.check_must_section(doc)
-        self.check_word_count(doc)
-        self.check_year_format(doc)
-        self.check_english_number_font(doc)
 
-        print("=====【正文单元】检测报告=====\n")
-        if len(self.errors) == 0:
-            print("✅正文单元没有检测到格式错误")
-        else:
-            for err in self.errors:
-                print(f"❌ {err}")
+def _run_font(run: dict, use_east_asia: bool = False) -> str:
+    """取 run 的字体名，优先西文字体。"""
+    if use_east_asia:
+        return _norm(run.get("east_asia_font") or run.get("font_name"))
+    return _norm(run.get("font_name") or run.get("east_asia_font"))
 
-        print("\n⚠️提醒：字体混排场景，建议人工复核英文、数字字体；字数仅统计中文字符。")
+
+def _count_chinese_words(paras: list[dict]) -> int:
+    """统计中文字符数（不含标点、空格、数字、英文）。"""
+    text = "".join(p.get("text", "") for p in paras)
+    # 移除标点、空格、数字、英文
+    text = re.sub(r'[，。、；：！？…—·《》（）【】""''\s\dA-Za-z]', '', text)
+    return len(text)
+
+
+def _is_digit_or_english(char: str) -> bool:
+    """判断字符是否为数字或英文字母。"""
+    return char.isdigit() or char.isalpha() and char.isascii()
+
+
+def _check_body_empty(body: list[dict]) -> list[dict]:
+    """① 正文为空。"""
+    if body:
+        return []
+    return [
+        _build_record(
+            "error", "body_empty",
+            "未检测到正文内容",
+            "论文应包含绪论、主体和结论三大模块",
+            "正文为空",
+            0, "",
+        )
+    ]
+
+
+def _check_intro_exists(body: list[dict]) -> list[dict]:
+    """② 缺少绪论。"""
+    text = "".join(p.get("text", "") for p in body)
+    if any(kw in text for kw in INTRO_KEYWORDS):
+        return []
+    return [
+        _build_record(
+            "error", "intro_missing",
+            "未检测到绪论",
+            "正文应以绪论/引言开头",
+            "正文中未出现「绪论」「引言」等关键字",
+            0, _truncate(text[:200]),
+        )
+    ]
+
+
+def _check_conclusion_exists(body: list[dict]) -> list[dict]:
+    """③ 缺少结论。"""
+    text = "".join(p.get("text", "") for p in body)
+    if any(kw in text for kw in CONCLUSION_KEYWORDS):
+        return []
+    return [
+        _build_record(
+            "error", "conclusion_missing",
+            "未检测到结论",
+            "正文应以结论/结语结尾",
+            "正文中未出现「结论」「结语」等关键字",
+            0, _truncate(text[-200:]),
+        )
+    ]
+
+
+def _check_word_count(body: list[dict]) -> list[dict]:
+    """④ 正文字数不少于8000字。"""
+    word_count = _count_chinese_words(body)
+    if word_count >= MIN_WORDS:
+        return []
+    return [
+        _build_record(
+            "error", "body_word_count_insufficient",
+            f"正文字数不足 {MIN_WORDS} 字（当前 {word_count} 字）",
+            f"正文总字数应不少于 {MIN_WORDS} 字",
+            f"当前 {word_count} 字",
+            0, "",
+        )
+    ]
+
+
+def _check_digit_and_english_font(body: list[dict]) -> list[dict]:
+    """⑤⑥ 阿拉伯数字和英文统一使用 Times New Roman。"""
+    errors: list[dict] = []
+    
+    for p in body:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+        
+        runs = _para_runs(p)
+        if not runs:
+            continue
+        
+        idx = p.get("index", 0)
+        preview = _truncate(text)
+        
+        # 检查每个 run 中的数字和英文
+        for run in runs:
+            run_text = run.get("text", "")
+            run_font = _run_font(run, use_east_asia=False)
+            
+            # 如果 run 包含数字或英文，检查字体
+            if any(_is_digit_or_english(ch) for ch in run_text):
+                if run_font and run_font not in _FONT_TIMES:
+                    errors.append(
+                        _build_record(
+                            "error", "digit_font_not_tnr" if any(ch.isdigit() for ch in run_text) else "english_font_not_tnr",
+                            f"{'数字' if any(ch.isdigit() for ch in run_text) else '英文'}字体不是 Times New Roman",
+                            "阿拉伯数字和英文应使用 Times New Roman",
+                            f"当前字体为 {run_font}",
+                            idx, preview,
+                        )
+                    )
+    
+    return errors
+
+
+def _check_year_format(body: list[dict]) -> list[dict]:
+    """⑦ 年份格式（warning）。"""
+    warnings: list[dict] = []
+    
+    text = "".join(p.get("text", "") for p in body)
+    # 查找所有年份
+    years = _RE_YEAR.findall(text)
+    
+    for year in years:
+        # 检查年份是否合理（1900-2099）
+        year_num = int(year)
+        if 1900 <= year_num <= 2099:
+            # 检查是否以 4 位数字出现
+            # 如果年份前后是数字，说明是更大数字的一部分，跳过
+            pass
+    
+    # 简单的启发式：如果年份少于 4 位（如 23 年），报 warning
+    short_years = re.findall(r'\b(\d{2})\b', text)
+    if short_years:
+        warnings.append(
+            _build_record(
+                "warning", "year_format_invalid",
+                "检测到非4位年份格式",
+                "年份应统一使用4位阿拉伯数字",
+                f"检测到 {', '.join(short_years[:3])}{'...' if len(short_years) > 3 else ''}",
+                0, _truncate(text[:200]),
+            )
+        )
+    
+    return warnings
+
+
+# ===================================================================
+#  公共接口
+# ===================================================================
+
+def check(body_items: list[dict], source_file: str = "") -> dict:
+    """对正文执行全部格式检查。"""
+    all_errors: list[dict] = []
+    all_warnings: list[dict] = []
+    
+    all_errors.extend(_check_body_empty(body_items))
+    all_errors.extend(_check_intro_exists(body_items))
+    all_errors.extend(_check_conclusion_exists(body_items))
+    all_errors.extend(_check_word_count(body_items))
+    all_errors.extend(_check_digit_and_english_font(body_items))
+    all_warnings.extend(_check_year_format(body_items))
+    
+    total_errors = len(all_errors)
+    total_warnings = len(all_warnings)
+    status = "pass" if (total_errors == 0 and total_warnings == 0) else "fail"
+    
+    word_count = _count_chinese_words(body_items)
+    
+    return {
+        "checker": CHECKER_ID,
+        "checker_name": CHECKER_NAME,
+        "timestamp": datetime.now().isoformat(),
+        "source_file": source_file,
+        "summary": {
+            "status": status,
+            "total_errors": total_errors,
+            "total_warnings": total_warnings,
+            "word_count": word_count,
+            "paragraph_count": len(body_items),
+        },
+        "errors": all_errors,
+        "warnings": all_warnings,
+    }
+
+
+def run(input_path: str | Path, output_path: str | Path) -> dict:
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    
+    with open(input_path, "r", encoding="utf-8") as f:
+        data: dict = json.load(f)
+    
+    source_file = data.get("file_name", input_path.name)
+    items = data.get("items", [])
+    
+    result = check(items, source_file=source_file)
+    
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    
+    return result
 
 
 if __name__ == "__main__":
-    checker = ContentChecker()
-    checker.run_all_check(r"你的论文.docx")
+    import sys
+    
+    _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    _DEFAULT_INPUT = _PROJECT_ROOT / "output" / "parser_json" / "body.json"
+    _DEFAULT_OUTPUT = _PROJECT_ROOT / "output" / "checker_json" / "body.json"
+    
+    input_path = sys.argv[1] if len(sys.argv) > 1 else str(_DEFAULT_INPUT)
+    output_path = sys.argv[2] if len(sys.argv) > 2 else str(_DEFAULT_OUTPUT)
+    
+    result = run(input_path, output_path)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
